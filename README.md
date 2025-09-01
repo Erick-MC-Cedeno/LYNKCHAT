@@ -75,17 +75,44 @@ To get the backend server running locally, follow these steps:
 
 ## API Endpoints
 
+All endpoints are prefixed with `/api`.
+
 ### Auth
 
-*   `POST /api/auth/signup`: Register a new user.
-*   `POST /api/auth/login`: Log in a user.
-*   `POST /api/auth/logout`: Log out a user.
+*   **`POST /auth/signup`**
+    *   Registers a new user.
+    *   **Request Body:** `fullName`, `username`, `password`, `gender`, `image` (optional).
+    *   **Response:** `201 Created` with user object.
+
+*   **`POST /auth/login`**
+    *   Logs in a user.
+    *   **Request Body:** `username`, `password`.
+    *   **Response:** `200 OK` with user object.
+
+*   **`POST /auth/logout`**
+    *   Logs out a user.
+    *   **Response:** `200 OK`.
 
 ### Users
 
-*   `GET /api/user`: Get all users for the sidebar.
+*   **`GET /user`**
+    *   Gets all users for the sidebar, excluding the logged-in user.
+    *   **Response:** `200 OK` with an array of user objects. Each user object now includes a `publicKey` field for end-to-end encryption.
+
+*   **`POST /user/publicKey`**
+    *   Updates the public key for the authenticated user.
+    *   **Request Body:** `publicKey` (string).
+    *   **Response:** `200 OK` with a success message.
 
 ### Messages
 
-*   `GET /api/messages/:id`: Get messages for a specific chat.
-*   `POST /api/messages/send/:id`: Send a message to a specific user.
+*   **`GET /messages/:id`**
+    *   Gets the messages for a specific chat.
+    *   `:id` is the ID of the other user in the conversation.
+    *   **Response:** `200 OK` with an array of message objects.
+
+*   **`POST /messages/send/:id`**
+    *   Sends a message to a specific user.
+    *   `:id` is the ID of the recipient.
+    *   **Request Body:** `message` (string). The message should be encrypted on the client-side before sending.
+    *   **Response:** `201 Created` with the new message object.

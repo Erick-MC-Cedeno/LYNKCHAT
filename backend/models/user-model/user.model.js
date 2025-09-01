@@ -25,6 +25,10 @@ const userSchema = new mongoose.Schema(
 			type: Buffer, 
 			default: null,
 		  },
+		publicKey: {
+			type: String,
+			default: null,
+		},
 		// createdAt, updatedAt => Member since <createdAt>
 	},
 	{ timestamps: true }

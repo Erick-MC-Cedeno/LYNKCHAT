@@ -65,8 +65,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const login = async (username: string, password: string) => {
     try {
       const response = await apiClient.login({ username, password })
-      setUser(response.user)
-      localStorage.setItem("lynkchat_user", JSON.stringify(response.user))
+      setUser(response)
+      localStorage.setItem("lynkchat_user", JSON.stringify(response))
 
       // Setup encryption after successful login
       await setupEncryption()
@@ -84,8 +84,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }) => {
     try {
       const response = await apiClient.signup(data)
-      setUser(response.user)
-      localStorage.setItem("lynkchat_user", JSON.stringify(response.user))
+      setUser(response)
+      localStorage.setItem("lynkchat_user", JSON.stringify(response))
 
       // Setup encryption after successful signup
       await setupEncryption()

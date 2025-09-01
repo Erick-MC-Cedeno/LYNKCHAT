@@ -19,6 +19,7 @@ export function SignupForm({ onToggleMode }: SignupFormProps) {
     fullName: "",
     username: "",
     password: "",
+    confirmPassword: "",
     gender: "",
     image: "",
   })
@@ -32,8 +33,15 @@ export function SignupForm({ onToggleMode }: SignupFormProps) {
     setLoading(true)
     setError("")
 
+    if (formData.password !== formData.confirmPassword) {
+      setError("Passwords don't match")
+      setLoading(false)
+      return
+    }
+
     try {
-      await signup(formData)
+      const { confirmPassword, ...dataToSend } = formData;
+      await signup(dataToSend);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Registration failed")
     } finally {
@@ -93,6 +101,20 @@ export function SignupForm({ onToggleMode }: SignupFormProps) {
               required
               className="bg-input border-border text-foreground placeholder:text-muted-foreground focus:ring-primary"
               placeholder="Create a password"
+            />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="confirmPassword" className="text-foreground">
+              Confirm Password
+            </Label>
+            <Input
+              id="confirmPassword"
+              type="password"
+              value={formData.confirmPassword}
+              onChange={(e) => handleInputChange("confirmPassword", e.target.value)}
+              required
+              className="bg-input border-border text-foreground placeholder:text-muted-foreground focus:ring-primary"
+              placeholder="Confirm your password"
             />
           </div>
           <div className="space-y-2">

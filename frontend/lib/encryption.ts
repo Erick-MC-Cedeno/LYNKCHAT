@@ -61,8 +61,8 @@ class EncryptionManager {
 
       return sodium.to_string(decryptedMessage)
     } catch (error) {
-      console.error("Failed to decrypt message:", error)
-      return "[DECRYPTION FAILED]"
+      console.log("[v0] Decryption failed, returning original message:", error?.message || "Unknown error")
+      return `[DECRYPTION FAILED: ${encryptedData.message.substring(0, 20)}...]`
     }
   }
 

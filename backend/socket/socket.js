@@ -1,67 +1,80 @@
-import { Server } from "socket.io";
-import http from "http";
-import express from "express";
+import { Server } from "socket.io"
+import http from "http"
+import express from "express"
 
-const app = express();
+const app = express()
 
-const server = http.createServer(app);
+const server = http.createServer(app)
 const io = new Server(server, {
-	cors: {
-		origin: ["http://localhost:3000"],
-		methods: ["GET", "POST"],
-	},
-});
+  cors: {
+    origin: ["http://localhost:3000"],
+    methods: ["GET", "POST"],
+  },
+})
 
-const userSocketMap = {}; 
+const userSocketMap = {}
 
 export const getReceiverSocketId = (receiverId) => {
-	return userSocketMap[receiverId];
-};
+  return userSocketMap[receiverId]
+}
 
 io.on("connection", (socket) => {
-	const userId = socket.handshake.query.userId;
-	if (userId != "undefined") userSocketMap[userId] = socket.id;
+  const userId = socket.handshake.query.userId
+  if (userId != "undefined") userSocketMap[userId] = socket.id
 
-	io.emit("getOnlineUsers", Object.keys(userSocketMap));
+  io.emit("getOnlineUsers", Object.keys(userSocketMap))
 
-	socket.on("typing", (receiverId) => {
-		const receiverSocketId = getReceiverSocketId(receiverId);
-		if (receiverSocketId) {
-			io.to(receiverSocketId).emit("typing", userId);
-		}
-	});
+  socket.on("sendMessage", async ({ receiverId, message }) => {
+    const receiverSocketId = getReceiverSocketId(receiverId)
+    if (receiverSocketId) {
+      // Send the message to the receiver in real-time
+      io.to(receiverSocketId).emit("newMessage", {
+        senderId: userId,
+        receiverId: receiverId,
+        message: message,
+        createdAt: new Date(),
+        _id: Date.now().toString(), // Temporary ID, will be replaced by actual DB ID
+      })
+    }
+  })
 
-	socket.on("stopTyping", (receiverId) => {
-		const receiverSocketId = getReceiverSocketId(receiverId);
-		if (receiverSocketId) {
-			io.to(receiverSocketId).emit("stopTyping", userId);
-		}
-	});
+  socket.on("typing", ({ receiverId }) => {
+    const receiverSocketId = getReceiverSocketId(receiverId)
+    if (receiverSocketId) {
+      io.to(receiverSocketId).emit("typing", { senderId: userId })
+    }
+  })
 
-	socket.on("markMessageAsRead", async (messageId) => {
-		try {
-			const Message = await import("../models/message-model/message.model.js").then(module => module.default);
-			const message = await Message.findById(messageId);
-			
-			if (message) {
-				message.read = true;
-				await message.save();
-				
-				
-				const senderSocketId = getReceiverSocketId(message.senderId);
-				if (senderSocketId) {
-					io.to(senderSocketId).emit("messageRead", messageId);
-				}
-			}
-		} catch (error) {
-			console.error("Error marking message as read:", error);
-		}
-	});
+  socket.on("stopTyping", ({ receiverId }) => {
+    const receiverSocketId = getReceiverSocketId(receiverId)
+    if (receiverSocketId) {
+      io.to(receiverSocketId).emit("stopTyping", { senderId: userId })
+    }
+  })
 
-	socket.on("disconnect", () => {
-		delete userSocketMap[userId];
-		io.emit("getOnlineUsers", Object.keys(userSocketMap));
-	});
-});
+  socket.on("markMessageAsRead", async (messageId) => {
+    try {
+      const Message = await import("../models/message-model/message.model.js").then((module) => module.default)
+      const message = await Message.findById(messageId)
 
-export { app, io, server };
+      if (message) {
+        message.read = true
+        await message.save()
+
+        const senderSocketId = getReceiverSocketId(message.senderId)
+        if (senderSocketId) {
+          io.to(senderSocketId).emit("messageRead", messageId)
+        }
+      }
+    } catch (error) {
+      console.error("Error marking message as read:", error)
+    }
+  })
+
+  socket.on("disconnect", () => {
+    delete userSocketMap[userId]
+    io.emit("getOnlineUsers", Object.keys(userSocketMap))
+  })
+})
+
+export { app, io, server }

@@ -19,6 +19,7 @@ export function MessageInput({ onSendMessage, selectedUser }: MessageInputProps)
   const [sending, setSending] = useState(false)
   const { startTyping, stopTyping } = useSocket()
   const typingTimeoutRef = useRef<NodeJS.Timeout | null>(null)
+  const [isTyping, setIsTyping] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -28,7 +29,13 @@ export function MessageInput({ onSendMessage, selectedUser }: MessageInputProps)
     try {
       await onSendMessage(message.trim())
       setMessage("")
-      stopTyping(selectedUser._id)
+      if (isTyping) {
+        stopTyping(selectedUser._id)
+        setIsTyping(false)
+      }
+      if (typingTimeoutRef.current) {
+        clearTimeout(typingTimeoutRef.current)
+      }
     } catch (error) {
       console.error("Failed to send message:", error)
     } finally {
@@ -41,21 +48,24 @@ export function MessageInput({ onSendMessage, selectedUser }: MessageInputProps)
     setMessage(value)
 
     if (value.trim()) {
-      // Start typing
-      startTyping(selectedUser._id)
+      if (!isTyping) {
+        startTyping(selectedUser._id)
+        setIsTyping(true)
+      }
 
-      // Clear existing timeout
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current)
       }
 
-      // Stop typing after 3 seconds of inactivity
       typingTimeoutRef.current = setTimeout(() => {
         stopTyping(selectedUser._id)
-      }, 3000)
+        setIsTyping(false)
+      }, 2000)
     } else {
-      // Stop typing if input is empty
-      stopTyping(selectedUser._id)
+      if (isTyping) {
+        stopTyping(selectedUser._id)
+        setIsTyping(false)
+      }
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current)
       }
@@ -64,11 +74,14 @@ export function MessageInput({ onSendMessage, selectedUser }: MessageInputProps)
 
   useEffect(() => {
     return () => {
+      if (isTyping) {
+        stopTyping(selectedUser._id)
+      }
       if (typingTimeoutRef.current) {
         clearTimeout(typingTimeoutRef.current)
       }
     }
-  }, [])
+  }, [selectedUser._id, stopTyping, isTyping])
 
   return (
     <div className="p-4 border-t border-border bg-card">

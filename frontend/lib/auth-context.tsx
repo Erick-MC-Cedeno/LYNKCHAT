@@ -24,6 +24,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined)
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [loading, setLoading] = useState(true)
+  const [encryptionSetup, setEncryptionSetup] = useState(false)
 
   useEffect(() => {
     const initializeAuth = async () => {
@@ -32,8 +33,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       // Check if user is already logged in
       const savedUser = localStorage.getItem("lynkchat_user")
-      if (savedUser) {
-        setUser(JSON.parse(savedUser))
+      if (savedUser && savedUser !== "undefined" && savedUser !== "null") {
+        try {
+          setUser(JSON.parse(savedUser))
+        } catch (error) {
+          console.error("Failed to parse saved user data:", error)
+          localStorage.removeItem("lynkchat_user") // Clear corrupted data
+        }
       }
       setLoading(false)
     }
@@ -42,23 +48,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const setupEncryption = async () => {
+    if (encryptionSetup) return
+
     try {
       if (!encryptionManager.hasKeyPair()) {
-        // Generate new key pair
         const { publicKey, privateKey } = encryptionManager.generateKeyPair()
         encryptionManager.storeKeyPair(publicKey, privateKey)
-
-        // Upload public key to server
         await apiClient.updatePublicKey(publicKey)
         console.log("[v0] Generated and uploaded new key pair")
       } else {
-        // Upload existing public key to server (in case it's missing)
         const publicKey = encryptionManager.getPublicKey()
         await apiClient.updatePublicKey(publicKey)
         console.log("[v0] Uploaded existing public key")
       }
+      setEncryptionSetup(true)
     } catch (error) {
       console.error("Failed to setup encryption:", error)
+      setTimeout(() => setEncryptionSetup(false), 5000)
     }
   }
 
@@ -67,8 +73,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const response = await apiClient.login({ username, password })
       setUser(response)
       localStorage.setItem("lynkchat_user", JSON.stringify(response))
-
-      // Setup encryption after successful login
       await setupEncryption()
     } catch (error) {
       throw error
@@ -86,8 +90,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const response = await apiClient.signup(data)
       setUser(response)
       localStorage.setItem("lynkchat_user", JSON.stringify(response))
-
-      // Setup encryption after successful signup
       await setupEncryption()
     } catch (error) {
       throw error

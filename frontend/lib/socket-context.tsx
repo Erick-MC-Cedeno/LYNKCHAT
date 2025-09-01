@@ -27,7 +27,7 @@ export function SocketProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (user) {
       // Connect to socket when user is authenticated
-      const newSocket = io("http://localhost:3000", {
+      const newSocket = io("http://localhost:5000", {
         query: {
           userId: user._id,
         },
@@ -42,19 +42,22 @@ export function SocketProvider({ children }: { children: ReactNode }) {
       })
 
       newSocket.on("newMessage", (message: Message) => {
-        // This will be handled by individual chat components
+        console.log("[v0] Received new message:", message)
+        // Dispatch to all components that need to handle new messages
         window.dispatchEvent(
-          new CustomEvent("newMessage", {
+          new CustomEvent("socketNewMessage", {
             detail: message,
           }),
         )
       })
 
       newSocket.on("typing", ({ senderId }: { senderId: string }) => {
+        console.log("[v0] User typing:", senderId)
         setTypingUsers((prev) => ({ ...prev, [senderId]: true }))
       })
 
       newSocket.on("stopTyping", ({ senderId }: { senderId: string }) => {
+        console.log("[v0] User stopped typing:", senderId)
         setTypingUsers((prev) => ({ ...prev, [senderId]: false }))
       })
 

@@ -17,6 +17,7 @@ interface ChatWindowProps {
 export function ChatWindow({ selectedUser }: ChatWindowProps) {
   const [messages, setMessages] = useState<Message[]>([])
   const [loading, setLoading] = useState(false)
+  const [lastFetchedUserId, setLastFetchedUserId] = useState<string | null>(null)
   const scrollAreaRef = useRef<HTMLDivElement>(null)
   const { sendMessage, joinChat, leaveChat, typingUsers, onlineUsers } = useSocket()
   const { user: currentUser } = useAuth()
@@ -24,37 +25,33 @@ export function ChatWindow({ selectedUser }: ChatWindowProps) {
   useEffect(() => {
     if (!selectedUser) return
 
+    if (selectedUser._id === lastFetchedUserId) return
+
     const fetchMessages = async () => {
       setLoading(true)
       try {
         const fetchedMessages = await apiClient.getMessages(selectedUser._id)
 
-        // Decrypt messages
         const decryptedMessages = fetchedMessages.map((message) => {
           try {
-            if (message.senderId === currentUser?._id) {
-              // Message sent by current user - decrypt using recipient's public key
-              if (selectedUser.publicKey) {
-                const encryptedData: EncryptedMessage = JSON.parse(message.message)
-                const decryptedText = encryptionManager.decryptMessage(encryptedData, selectedUser.publicKey)
-                return { ...message, message: decryptedText }
-              }
+            const encryptedData: EncryptedMessage = JSON.parse(message.message)
+            let decryptedText: string
+
+            if (selectedUser.publicKey) {
+              decryptedText = encryptionManager.decryptMessage(encryptedData, selectedUser.publicKey)
             } else {
-              // Message received from selected user - decrypt using their public key
-              if (selectedUser.publicKey) {
-                const encryptedData: EncryptedMessage = JSON.parse(message.message)
-                const decryptedText = encryptionManager.decryptMessage(encryptedData, selectedUser.publicKey)
-                return { ...message, message: decryptedText }
-              }
+              return { ...message, message: "[KEY MISSING]" }
             }
-            return { ...message, message: "[ENCRYPTION KEY MISSING]" }
+
+            return { ...message, message: decryptedText }
           } catch (error) {
-            // If parsing fails, assume it's plain text (for backwards compatibility)
+            console.log("[v0] Failed to decrypt message, treating as plain text:", error)
             return message
           }
         })
 
         setMessages(decryptedMessages)
+        setLastFetchedUserId(selectedUser._id)
         joinChat(selectedUser._id)
       } catch (error) {
         console.error("Failed to fetch messages:", error)
@@ -67,43 +64,55 @@ export function ChatWindow({ selectedUser }: ChatWindowProps) {
 
     const handleNewMessage = (event: CustomEvent<Message>) => {
       const newMessage = event.detail
+      console.log("[v0] Handling new message in chat window:", newMessage)
+
+      // Only handle messages for current conversation
       if (
         newMessage.senderId === selectedUser._id ||
         (newMessage.senderId === currentUser?._id && newMessage.receiverId === selectedUser._id)
       ) {
-        // Decrypt the new message
         let decryptedMessage = newMessage
+
+        // Decrypt the message if it's encrypted
         try {
+          const encryptedData: EncryptedMessage = JSON.parse(newMessage.message)
           if (selectedUser.publicKey) {
-            const encryptedData: EncryptedMessage = JSON.parse(newMessage.message)
             const decryptedText = encryptionManager.decryptMessage(encryptedData, selectedUser.publicKey)
             decryptedMessage = { ...newMessage, message: decryptedText }
           }
         } catch (error) {
-          // If parsing fails, assume it's plain text
-          console.log("[v0] Message appears to be plain text")
+          // Message is already plain text or decryption failed
+          console.log("[v0] Message appears to be plain text or decryption failed")
         }
 
+        // Add message to state if it's not already there
         setMessages((prev) => {
-          // Avoid duplicate messages
-          if (prev.some((msg) => msg._id === decryptedMessage._id)) {
+          const messageExists = prev.some((msg) => msg._id === decryptedMessage._id)
+          if (messageExists) {
+            console.log("[v0] Message already exists, skipping")
             return prev
           }
+          console.log("[v0] Adding new message to state")
           return [...prev, decryptedMessage]
         })
       }
     }
 
-    window.addEventListener("newMessage", handleNewMessage as EventListener)
+    window.addEventListener("socketNewMessage", handleNewMessage as EventListener)
 
     return () => {
       leaveChat(selectedUser._id)
-      window.removeEventListener("newMessage", handleNewMessage as EventListener)
+      window.removeEventListener("socketNewMessage", handleNewMessage as EventListener)
     }
-  }, [selectedUser, joinChat, leaveChat, currentUser])
+  }, [selectedUser, joinChat, leaveChat, currentUser, lastFetchedUserId])
 
   useEffect(() => {
-    // Scroll to bottom when new messages arrive
+    if (selectedUser && selectedUser._id !== lastFetchedUserId) {
+      setMessages([])
+    }
+  }, [selectedUser, lastFetchedUserId])
+
+  useEffect(() => {
     if (scrollAreaRef.current) {
       const scrollElement = scrollAreaRef.current.querySelector("[data-radix-scroll-area-viewport]")
       if (scrollElement) {
@@ -119,23 +128,24 @@ export function ChatWindow({ selectedUser }: ChatWindowProps) {
     }
 
     try {
-      // Encrypt the message
       const encryptedData = encryptionManager.encryptMessage(messageText, selectedUser.publicKey)
       const encryptedMessageString = JSON.stringify(encryptedData)
 
-      // Send encrypted message via socket
+      console.log("[v0] Sending message via socket")
       sendMessage(selectedUser._id, encryptedMessageString)
 
-      // Also send via API for persistence
+      // Then save to database
       const newMessage = await apiClient.sendMessage(selectedUser._id, encryptedMessageString)
+      console.log("[v0] Message saved to database:", newMessage)
 
-      // Add decrypted version to local state for display
-      const decryptedMessage = { ...newMessage, message: messageText }
+      // Add the message to local state immediately with decrypted text
+      const localMessage = { ...newMessage, message: messageText }
       setMessages((prev) => {
-        if (prev.some((msg) => msg._id === newMessage._id)) {
+        const messageExists = prev.some((msg) => msg._id === newMessage._id)
+        if (messageExists) {
           return prev
         }
-        return [...prev, decryptedMessage]
+        return [...prev, localMessage]
       })
     } catch (error) {
       console.error("Failed to send message:", error)
@@ -159,7 +169,6 @@ export function ChatWindow({ selectedUser }: ChatWindowProps) {
 
   return (
     <div className="flex-1 bg-background flex flex-col">
-      {/* Chat Header */}
       <div className="p-4 border-b border-border bg-card">
         <div className="flex items-center gap-3">
           <div className={`w-3 h-3 rounded-full ${isOnline ? "bg-primary animate-pulse" : "bg-muted"}`}></div>
@@ -178,7 +187,6 @@ export function ChatWindow({ selectedUser }: ChatWindowProps) {
         </div>
       </div>
 
-      {/* Messages Area */}
       <ScrollArea className="flex-1 p-4" ref={scrollAreaRef}>
         {loading ? (
           <div className="text-center text-muted-foreground font-mono">DECRYPTING MESSAGES...</div>
@@ -194,7 +202,6 @@ export function ChatWindow({ selectedUser }: ChatWindowProps) {
         )}
       </ScrollArea>
 
-      {/* Message Input */}
       {hasEncryption ? (
         <MessageInput onSendMessage={handleSendMessage} selectedUser={selectedUser} />
       ) : (

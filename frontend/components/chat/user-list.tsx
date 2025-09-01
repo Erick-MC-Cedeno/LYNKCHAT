@@ -16,23 +16,28 @@ interface UserListProps {
 export function UserList({ selectedUserId, onUserSelect }: UserListProps) {
   const [users, setUsers] = useState<User[]>([])
   const [loading, setLoading] = useState(true)
+  const [hasInitialized, setHasInitialized] = useState(false)
   const { user: currentUser } = useAuth()
   const { onlineUsers } = useSocket()
 
   useEffect(() => {
+    if (hasInitialized) return
+
     const fetchUsers = async () => {
       try {
         const fetchedUsers = await apiClient.getUsers()
         setUsers(fetchedUsers)
+        setHasInitialized(true)
       } catch (error) {
         console.error("Failed to fetch users:", error)
+        setTimeout(() => setHasInitialized(false), 5000)
       } finally {
         setLoading(false)
       }
     }
 
     fetchUsers()
-  }, [])
+  }, [hasInitialized])
 
   if (loading) {
     return (

@@ -8,7 +8,7 @@ import { ThemeProvider } from "@/components/theme-provider"
 import { Suspense } from "react"
 
 export const metadata: Metadata = {
-  title: "LYNKCHAT - Secure Messaging",
+  title: "LYNKCHAT",
   description: "End-to-end encrypted real-time chat application",
   generator: "v0.app",
 }

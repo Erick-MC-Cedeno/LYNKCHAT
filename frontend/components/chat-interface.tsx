@@ -1,7 +1,7 @@
 "use client"
 
 import type React from "react"
-import { authAPI, userAPI, messageAPI, type User, type Message } from "@/lib/api" // Fixed import to use correct file path for authAPI
+import { authAPI, userAPI, messageAPI, type User, type Message } from "@/lib/api"
 import { useState, useEffect, useRef } from "react"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -18,8 +18,6 @@ interface ChatInterfaceProps {
 }
 
 export function ChatInterface({ user, onLogout }: ChatInterfaceProps) {
-  // Encryption removed: messages are plain text strings
-
   const [users, setUsers] = useState<User[]>([])
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
@@ -28,31 +26,28 @@ export function ChatInterface({ user, onLogout }: ChatInterfaceProps) {
   const [isLoading, setIsLoading] = useState(false)
   const [isMobileSidebarOpen, setIsMobileSidebarOpen] = useState(true)
   const [isTyping, setIsTyping] = useState(false)
+
   const messagesEndRef = useRef<HTMLDivElement>(null)
   const typingTimeoutRef = useRef<number | null>(null)
-  const { toast } = useToast()
   const selectedUserRef = useRef<User | null>(null)
+  const { toast } = useToast()
 
-  // Keep ref in sync with selectedUser so listeners can read the latest value
+  // Sync ref for socket listeners
   useEffect(() => {
     selectedUserRef.current = selectedUser
   }, [selectedUser])
+
+  // Helper to safely format usernames
   const sanitizeUsername = (uname?: string) => {
     if (!uname) return "unknown"
-    try {
-      return uname.includes("@") ? uname.split("@")[0] : uname
-    } catch (e) {
-      return uname
-    }
+    return uname.includes("@") ? uname.split("@")[0] : uname
   }
 
-  // Helper function for robust ID comparison (handles string vs ObjectId)
-  const isSameId = (id1?: string, id2?: string): boolean => {
-    if (!id1 || !id2) return false
-    return id1.toString() === id2.toString()
-  }
+  // Helper for ID comparison
+  const isSameId = (id1?: string, id2?: string) => id1?.toString() === id2?.toString()
+
+  // Reset state on conversation switch
   useEffect(() => {
-    // Clear messages and typing indicator when switching conversations
     setMessages([])
     setIsTyping(false)
     if (typingTimeoutRef.current) {
@@ -61,30 +56,28 @@ export function ChatInterface({ user, onLogout }: ChatInterfaceProps) {
     }
   }, [selectedUser])
 
-  // Establish socket connection and listeners once per logged-in user
+  // Socket connection and event handlers
   useEffect(() => {
     socketService.connect(user?._id)
 
-    const handleOnline = (users: string[]) => setOnlineUsers(users)
     const handleNewMessage = (message: any) => {
-      // Filter Level 1: Message must be relevant to current user
-      const isRelevantToUser =
-        isSameId(message.senderId, user._id) ||
-        isSameId(message.receiverId, user._id)
-      if (!isRelevantToUser) return
+      const isRelevant = isSameId(message.senderId, user._id) || isSameId(message.receiverId, user._id)
+      if (!isRelevant) return
 
-      // Filter Level 2: Message must belong to current conversation
       if (selectedUserRef.current) {
-        const belongsToConversation =
-          (isSameId(message.senderId, user._id) && isSameId(message.receiverId, selectedUserRef.current._id)) ||
-          (isSameId(message.senderId, selectedUserRef.current._id) && isSameId(message.receiverId, user._id))
+        const currentId = selectedUserRef.current._id
+        const belongsToChat =
+          (isSameId(message.senderId, user._id) && isSameId(message.receiverId, currentId)) ||
+          (isSameId(message.senderId, currentId) && isSameId(message.receiverId, user._id))
 
-        if (!belongsToConversation) return
+        if (!belongsToChat) return
       }
 
       setMessages((prev) => {
-        const tempIndex = prev.findIndex(
-          (m) => m._id?.toString().startsWith("tmp-") && m.message === message.message && isSameId(m.senderId, message.senderId)
+        const tempIndex = prev.findIndex(m =>
+          m._id?.toString().startsWith("tmp-") &&
+          m.message === message.message &&
+          isSameId(m.senderId, message.senderId)
         )
 
         if (tempIndex !== -1) {
@@ -92,27 +85,20 @@ export function ChatInterface({ user, onLogout }: ChatInterfaceProps) {
           copy[tempIndex] = message
           return copy
         }
-
         return [...prev, message]
       })
     }
 
-    const handleTyping = (payload: any) => {
+    const handleTypingStatus = (payload: any, isTyping: boolean) => {
       if (selectedUserRef.current && isSameId(payload?.senderId, selectedUserRef.current._id)) {
-        setIsTyping(true)
+        setIsTyping(isTyping)
       }
     }
 
-    const handleStopTyping = (payload: any) => {
-      if (selectedUserRef.current && isSameId(payload?.senderId, selectedUserRef.current._id)) {
-        setIsTyping(false)
-      }
-    }
-
-    socketService.onOnlineUsers(handleOnline)
+    socketService.onOnlineUsers(setOnlineUsers)
     socketService.onNewMessage(handleNewMessage)
-    socketService.onTyping(handleTyping)
-    socketService.onStopTyping(handleStopTyping)
+    socketService.onTyping((p) => handleTypingStatus(p, true))
+    socketService.onStopTyping((p) => handleTypingStatus(p, false))
 
     return () => {
       socketService.off("getOnlineUsers")
@@ -123,109 +109,74 @@ export function ChatInterface({ user, onLogout }: ChatInterfaceProps) {
     }
   }, [user?._id])
 
+  // Fetch contacts
   useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        const usersData = await userAPI.getAllUsers()
-        setUsers(usersData)
-      } catch (error) {
-        // Error intentionally not logged to reduce noisy dev output
-        toast({
-          title: "Failed to load contacts",
-          description: "Please refresh the page.",
-          variant: "destructive",
-        })
-      }
-    }
-
-    fetchUsers()
+    userAPI.getAllUsers()
+      .then(setUsers)
+      .catch(() => toast({ title: "Failed to load contacts", variant: "destructive" }))
   }, [toast])
 
+  // Fetch messages
   useEffect(() => {
-    if (selectedUser) {
-      const fetchMessages = async () => {
-        try {
-          const messagesData = await messageAPI.getMessages(selectedUser._id)
+    if (!selectedUser) return
+    messageAPI.getMessages(selectedUser._id)
+      .then(setMessages)
+      .catch(() => toast({ title: "Failed to load messages", variant: "destructive" }))
+  }, [selectedUser, toast])
 
-          // Messages are plain text — store as received
-          setMessages(messagesData)
-        } catch (error) {
-          // Error intentionally not logged to reduce noisy dev output
-          toast({
-            title: "Failed to load messages",
-            description: "Please try again.",
-            variant: "destructive",
-          })
-        }
-      }
-
-      fetchMessages()
-    }
-  }, [selectedUser, user?._id, toast])
-
-  // Scroll to bottom when messages change
+  // Auto-scroll to bottom
   useEffect(() => {
-    // Delay scrolling slightly to ensure ScrollArea viewport has rendered
-    const scrollToBottom = () => {
-      try {
-        messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" })
-      } catch (e) {
-        // ignore
-      }
-    }
+    setTimeout(() => {
+      messagesEndRef.current?.scrollIntoView({ behavior: "smooth", block: "end" })
+    }, 50)
+  }, [messages])
 
-    const id = window.setTimeout(scrollToBottom, 50)
-    return () => window.clearTimeout(id)
-  }, [messages, selectedUser?._id])
+  const handleTyping = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setNewMessage(e.target.value)
+
+    if (!selectedUser || !user?._id) return
+
+    socketService.emitTyping({ receiverId: selectedUser._id, senderId: user._id })
+
+    if (typingTimeoutRef.current) window.clearTimeout(typingTimeoutRef.current)
+
+    typingTimeoutRef.current = window.setTimeout(() => {
+      if (selectedUser && user?._id) {
+        socketService.emitStopTyping({ receiverId: selectedUser._id, senderId: user._id })
+      }
+      typingTimeoutRef.current = null
+    }, 1500)
+  }
 
   const handleSendMessage = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newMessage.trim() || !selectedUser || isLoading) return
 
     setIsLoading(true)
+    const tempId = `tmp-${Date.now()}`
+    const messageContent = newMessage
+
+    // Optimistic update
+    const optimisticMsg: Message = {
+      _id: tempId,
+      senderId: user._id,
+      receiverId: selectedUser._id,
+      message: messageContent,
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+      read: false
+    }
+
+    setMessages(prev => [...prev, optimisticMsg])
+    setNewMessage("")
+
     try {
-      const messageToSend = newMessage
-      const tempId = `tmp-${Date.now()}`
-
-      // Optimistically add message to UI
-      const optimisticMessage: Message = {
-        _id: tempId,
-        senderId: user?._id || "",
-        receiverId: selectedUser._id,
-        message: messageToSend,
-        createdAt: new Date().toISOString(),
-        updatedAt: new Date().toISOString(),
-        read: false
-      }
-
-      if (selectedUser) {
-        setMessages((prev) => [...prev, optimisticMessage])
-      }
-
-      setNewMessage("")
-
-      // Send via API (CRUD) - this will persist to DB and trigger socket event for receiver
-      const sentMessage = await messageAPI.sendMessage(selectedUser._id, messageToSend)
-
-      // Replace optimistic message with real message
-      setMessages((prev) =>
-        prev.map(msg => msg._id === tempId ? sentMessage : msg)
-      )
-
-      // Stop typing when message is sent
-      if (selectedUser && user?._id) {
-        socketService.emitStopTyping({ receiverId: selectedUser._id, senderId: user._id })
-      }
-
+      const sentMessage = await messageAPI.sendMessage(selectedUser._id, messageContent)
+      setMessages(prev => prev.map(msg => msg._id === tempId ? sentMessage : msg))
+      socketService.emitStopTyping({ receiverId: selectedUser._id, senderId: user._id })
     } catch (error: any) {
-      // Remove optimistic message on error
-      setMessages((prev) => prev.filter(msg => !msg._id?.startsWith("tmp-")))
-
-      toast({
-        title: "Failed to send message",
-        description: error.message || "Please try again.",
-        variant: "destructive",
-      })
+      setMessages(prev => prev.filter(msg => msg._id !== tempId))
+      toast({ title: "Failed to send", description: error.message, variant: "destructive" })
     } finally {
       setIsLoading(false)
     }
@@ -234,8 +185,6 @@ export function ChatInterface({ user, onLogout }: ChatInterfaceProps) {
   const handleLogout = async () => {
     try {
       await authAPI.logout()
-    } catch (error) {
-      // Error intentionally not logged to reduce noisy dev output
     } finally {
       socketService.disconnect()
       onLogout()
@@ -244,7 +193,7 @@ export function ChatInterface({ user, onLogout }: ChatInterfaceProps) {
 
   return (
     <div className="h-screen flex bg-background overflow-hidden relative">
-      {/* Mobile backdrop overlay */}
+      {/* Mobile Overlay */}
       {isMobileSidebarOpen && (
         <div
           className="md:hidden fixed inset-0 bg-black/50 z-40 transition-opacity"
@@ -253,29 +202,19 @@ export function ChatInterface({ user, onLogout }: ChatInterfaceProps) {
       )}
 
       {/* Sidebar */}
-      {/* Sidebar */}
       <div className={`
-        w-full md:w-80
-        fixed md:relative inset-y-0 left-0 z-50
+        w-full md:w-80 fixed md:relative inset-y-0 left-0 z-50
         ${isMobileSidebarOpen ? 'translate-x-0' : '-translate-x-full'}
-        md:translate-x-0
-        border-r border-border bg-background/95 backdrop-blur-sm 
-        transition-all duration-300 
-        overflow-hidden
+        md:translate-x-0 border-r border-border bg-background/95 backdrop-blur-sm 
+        transition-all duration-300 overflow-hidden
       `}>
-
         <div className="p-4 border-b border-border">
           <div className="flex items-center justify-between mb-4">
             <div className="flex items-center gap-2">
               <Shield className="h-6 w-6 text-accent cyber-text" />
               <h2 className="text-xl font-bold cyber-text">LYNKCHAT</h2>
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={handleLogout}
-              className="text-muted-foreground hover:text-destructive"
-            >
+            <Button variant="ghost" size="sm" onClick={handleLogout} className="text-muted-foreground hover:text-destructive">
               <LogOut className="h-4 w-4" />
             </Button>
           </div>
@@ -287,7 +226,7 @@ export function ChatInterface({ user, onLogout }: ChatInterfaceProps) {
               </AvatarFallback>
             </Avatar>
             <div className="flex-1 min-w-0">
-              <p className="font-medium truncate">{user?.fullName || "Unknown User"}</p>
+              <p className="font-medium truncate">{user?.fullName || "Unknown"}</p>
               <p className="text-sm text-muted-foreground">@{sanitizeUsername(user?.username)}</p>
             </div>
             <Lock className="h-4 w-4 text-accent" />
@@ -298,9 +237,7 @@ export function ChatInterface({ user, onLogout }: ChatInterfaceProps) {
           <div className="flex items-center gap-2 mb-4">
             <Users className="h-4 w-4 text-accent" />
             <h3 className="font-semibold">Contacts</h3>
-            <Badge variant="secondary" className="ml-auto">
-              {users.length}
-            </Badge>
+            <Badge variant="secondary" className="ml-auto">{users.length}</Badge>
           </div>
 
           <ScrollArea className="h-[calc(100vh-200px)]">
@@ -312,8 +249,8 @@ export function ChatInterface({ user, onLogout }: ChatInterfaceProps) {
                     setSelectedUser(contact)
                     setIsMobileSidebarOpen(false)
                   }}
-                  className={`flex items-center gap-3 p-3 md:p-3 py-4 rounded-lg cursor-pointer transition-all hover:bg-muted/50 ${selectedUser?._id === contact._id ? "bg-accent/20 cyber-border" : ""
-                    }`}
+                  className={`flex items-center gap-3 p-3 py-4 rounded-lg cursor-pointer transition-all hover:bg-muted/50 
+                    ${selectedUser?._id === contact._id ? "bg-accent/20 cyber-border" : ""}`}
                 >
                   <div className="relative">
                     <Avatar className="h-10 w-10">
@@ -322,14 +259,13 @@ export function ChatInterface({ user, onLogout }: ChatInterfaceProps) {
                       </AvatarFallback>
                     </Avatar>
                     {onlineUsers.includes(contact._id) && (
-                      <div className="absolute -bottom-1 -right-1 h-3 w-3 bg-accent rounded-full border-2 border-background cyber-glow"></div>
+                      <div className="absolute -bottom-1 -right-1 h-3 w-3 bg-accent rounded-full border-2 border-background cyber-glow" />
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium truncate">{contact?.fullName || "Unknown Contact"}</p>
+                    <p className="font-medium truncate">{contact?.fullName || "Unknown"}</p>
                     <p className="text-sm text-muted-foreground">@{sanitizeUsername(contact?.username)}</p>
                   </div>
-                  {/* publicKey removed — encryption disabled */}
                 </div>
               ))}
             </div>
@@ -341,14 +277,12 @@ export function ChatInterface({ user, onLogout }: ChatInterfaceProps) {
       <div className="flex-1 flex flex-col">
         {selectedUser ? (
           <>
-            {/* Chat Header */}
             <div className="p-4 border-b border-border bg-card/30 backdrop-blur-sm">
               <div className="flex items-center gap-3">
-                {/* Back button for mobile */}
                 <button
                   onClick={() => setIsMobileSidebarOpen(true)}
                   className="md:hidden p-2 -ml-2 hover:bg-muted rounded-lg transition-colors"
-                  aria-label="Back to contacts"
+                  aria-label="Back"
                 >
                   <ArrowLeft className="h-5 w-5" />
                 </button>
@@ -363,90 +297,52 @@ export function ChatInterface({ user, onLogout }: ChatInterfaceProps) {
                     @{sanitizeUsername(selectedUser.username)}
                     {onlineUsers.includes(selectedUser._id) && <span className="text-accent">• Online</span>}
                   </p>
-                  {isTyping && (
-                    <p className="text-xs text-accent mt-1">typing...</p>
-                  )}
+                  {isTyping && <p className="text-xs text-accent mt-1">typing...</p>}
                 </div>
-                {/* Encryption disabled */}
               </div>
             </div>
 
-            {/* Messages */}
             <ScrollArea className="flex-1 px-3 md:px-6 py-4">
               <div className="flex justify-center">
-                <div className="w-full max-w-3xl">
-                  <div className="space-y-6">
-                    {messages.map((message) => {
-                      const isMe = message.senderId === user?._id
-
-                      return (
-                        <div
-                          key={message._id}
-                          className={`flex items-end px-6 w-full ${isMe ? "justify-end" : "justify-start"}`}
-                        >
-                          {/* For incoming messages show contact avatar; outgoing messages have no avatar */}
-                          {!isMe && (
-                            <div className="mr-2 flex-shrink-0">
-                              <Avatar className="h-8 w-8">
-                                <AvatarFallback className="bg-secondary text-secondary-foreground">
-                                  {selectedUser?.fullName?.charAt(0)?.toUpperCase() || "?"}
-                                </AvatarFallback>
-                              </Avatar>
-                            </div>
-                          )}
-
-                          <div
-                            className={`max-w-[85%] sm:max-w-[75%] md:max-w-[60%] lg:max-w-md px-4 py-2 rounded-lg ${isMe
-                              ? "bg-accent text-accent-foreground message-glow"
-                              : "bg-muted text-muted-foreground cyber-border"
-                              }`}
-                          >
-                            <p className="text-sm">{message.message}</p>
-                            <p className="text-xs opacity-70 mt-1">{new Date(message.createdAt).toLocaleTimeString()}</p>
+                <div className="w-full max-w-3xl space-y-6">
+                  {messages.map((message) => {
+                    const isMe = message.senderId === user?._id
+                    return (
+                      <div key={message._id} className={`flex items-end px-6 w-full ${isMe ? "justify-end" : "justify-start"}`}>
+                        {!isMe && (
+                          <div className="mr-2 flex-shrink-0">
+                            <Avatar className="h-8 w-8">
+                              <AvatarFallback className="bg-secondary text-secondary-foreground">
+                                {selectedUser?.fullName?.charAt(0)?.toUpperCase() || "?"}
+                              </AvatarFallback>
+                            </Avatar>
                           </div>
+                        )}
+                        <div className={`max-w-[85%] sm:max-w-[75%] md:max-w-[60%] lg:max-w-md px-4 py-2 rounded-lg 
+                          ${isMe ? "bg-accent text-accent-foreground message-glow" : "bg-muted text-muted-foreground cyber-border"}`}>
+                          <p className="text-sm">{message.message}</p>
+                          <p className="text-xs opacity-70 mt-1">{new Date(message.createdAt).toLocaleTimeString()}</p>
                         </div>
-                      )
-                    })}
-                    <div ref={messagesEndRef} />
-                  </div>
+                      </div>
+                    )
+                  })}
+                  <div ref={messagesEndRef} />
                 </div>
               </div>
             </ScrollArea>
 
-            {/* Message Input */}
             <div className="p-4 border-t border-border bg-card/30 backdrop-blur-sm">
               <form onSubmit={handleSendMessage} className="flex gap-2 items-center">
                 <div className="relative flex-1">
                   <Input
                     value={newMessage}
-                    onChange={(e) => {
-                      const val = e.target.value
-                      setNewMessage(val)
-
-                      // emit typing event to the selected user
-                      if (selectedUser && user?._id) {
-                        socketService.emitTyping({ receiverId: selectedUser._id, senderId: user._id })
-
-                        // reset stop-typing timeout
-                        if (typingTimeoutRef.current) {
-                          window.clearTimeout(typingTimeoutRef.current)
-                        }
-                        typingTimeoutRef.current = window.setTimeout(() => {
-                          if (selectedUser && user?._id) {
-                            socketService.emitStopTyping({ receiverId: selectedUser._id, senderId: user._id })
-                          }
-                          typingTimeoutRef.current = null
-                        }, 1500)
-                      }
-                    }}
+                    onChange={handleTyping}
                     placeholder="Type a message..."
                     className="w-full h-10 sm:h-14 pr-11 sm:pr-14 py-2 sm:py-3 text-sm rounded-full border-2 cyber-border bg-input focus:ring-2 focus:ring-accent transition-all"
                     disabled={isLoading}
                   />
-
                   <Button
                     type="submit"
-                    aria-label="Send message"
                     size="icon"
                     className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 sm:h-9 sm:w-9 rounded-full cyber-glow bg-accent text-accent-foreground hover:bg-accent/90 hover:scale-105 transition-transform shadow-lg"
                     disabled={isLoading || !newMessage.trim()}

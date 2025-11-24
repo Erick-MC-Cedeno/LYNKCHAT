@@ -7,10 +7,10 @@ LYNKCHAT is a real-time chat application built with the MERN stack (MongoDB, Exp
 Below are the main technologies used in this project.
 
 
- **Javascript**
+- **Javascript**
 [![JavaScript](https://img.shields.io/badge/JavaScript-F7DF1E?style=for-the-badge&logo=javascript&logoColor=black)](https://developer.mozilla.org/en-US/docs/Web/JavaScript)
 
- **Typescript**
+- **Typescript**
 [![TypeScript](https://img.shields.io/badge/TypeScript-3178C6?style=for-the-badge&logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
 
 - **Next.js**

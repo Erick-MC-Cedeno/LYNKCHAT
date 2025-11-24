@@ -22,12 +22,17 @@ export const getReceiverSocketId = (receiverId) => {
 }
 
 io.on("connection", (socket) => {
-  const userId = socket.handshake.query.userId
-  // Support both handshake query and explicit join event from client
-  if (userId != "undefined") userSocketMap[userId] = socket.id
+  const handshakeUserId = socket.handshake.query.userId
+  // We'll track the connected user's id (can be supplied via handshake or via explicit "join")
+  let connectedUserId = null
+  if (handshakeUserId && handshakeUserId !== "undefined") {
+    connectedUserId = handshakeUserId
+    userSocketMap[connectedUserId] = socket.id
+  }
 
   socket.on("join", (joinedUserId) => {
     if (joinedUserId != null && joinedUserId !== "undefined") {
+      connectedUserId = joinedUserId
       userSocketMap[joinedUserId] = socket.id
     }
     io.emit("getOnlineUsers", Object.keys(userSocketMap))
@@ -39,8 +44,8 @@ io.on("connection", (socket) => {
   // When client emits a message, persist and forward it
   socket.on("sendMessage", async ({ receiverId, message, senderId: suppliedSender }) => {
     try {
-      // Prefer sender id supplied by client, fall back to handshake query
-      const senderId = suppliedSender || userId
+      // Prefer sender id supplied by client, fall back to connectedUserId
+      const senderId = suppliedSender || connectedUserId
 
       if (!message || message.toString().trim().length === 0) return
 
@@ -80,14 +85,14 @@ io.on("connection", (socket) => {
   socket.on("typing", ({ receiverId }) => {
     const receiverSocketId = getReceiverSocketId(receiverId)
     if (receiverSocketId) {
-      io.to(receiverSocketId).emit("typing", { senderId: userId })
+      io.to(receiverSocketId).emit("typing", { senderId: connectedUserId })
     }
   })
 
   socket.on("stopTyping", ({ receiverId }) => {
     const receiverSocketId = getReceiverSocketId(receiverId)
     if (receiverSocketId) {
-      io.to(receiverSocketId).emit("stopTyping", { senderId: userId })
+      io.to(receiverSocketId).emit("stopTyping", { senderId: connectedUserId })
     }
   })
 
@@ -110,7 +115,7 @@ io.on("connection", (socket) => {
   })
 
   socket.on("disconnect", () => {
-    delete userSocketMap[userId]
+    if (connectedUserId) delete userSocketMap[connectedUserId]
     io.emit("getOnlineUsers", Object.keys(userSocketMap))
   })
 })

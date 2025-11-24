@@ -59,6 +59,15 @@ class SocketService {
     this.socket?.on("newMessage", callback)
   }
 
+  // Listen for typing events
+  onTyping(callback: (payload: { senderId: string }) => void): void {
+    this.socket?.on("typing", callback)
+  }
+
+  onStopTyping(callback: (payload: { senderId: string }) => void): void {
+    this.socket?.on("stopTyping", callback)
+  }
+
   // Listen for online users
   onOnlineUsers(callback: (users: string[]) => void): void {
     this.socket?.on("getOnlineUsers", callback)
@@ -67,6 +76,15 @@ class SocketService {
   // Send a message through socket
   sendMessage(message: SocketMessage): void {
     this.socket?.emit("sendMessage", message)
+  }
+
+  // Emit typing / stopTyping events
+  emitTyping(payload: { receiverId: string; senderId?: string }): void {
+    this.socket?.emit("typing", payload)
+  }
+
+  emitStopTyping(payload: { receiverId: string; senderId?: string }): void {
+    this.socket?.emit("stopTyping", payload)
   }
 
   // Remove listeners

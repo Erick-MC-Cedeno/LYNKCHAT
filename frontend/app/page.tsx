@@ -22,7 +22,7 @@ export default function Home() {
           setUser(userData);
         }
       } catch (error) {
-        console.error("[v0] App initialization failed:", error)
+        // Error intentionally not logged to reduce noisy dev output
       } finally {
         setIsLoading(false)
       }

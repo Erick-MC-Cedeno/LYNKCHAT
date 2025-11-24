@@ -106,7 +106,7 @@ export function ChatInterface({ user, onLogout }: ChatInterfaceProps) {
         const usersData = await userAPI.getAllUsers()
         setUsers(usersData)
       } catch (error) {
-        console.error("[v0] Failed to fetch users:", error)
+        // Error intentionally not logged to reduce noisy dev output
         toast({
           title: "Failed to load contacts",
           description: "Please refresh the page.",
@@ -127,7 +127,7 @@ export function ChatInterface({ user, onLogout }: ChatInterfaceProps) {
           // Messages are plain text — store as received
           setMessages(messagesData)
         } catch (error) {
-          console.error("[v0] Failed to fetch messages:", error)
+          // Error intentionally not logged to reduce noisy dev output
           toast({
             title: "Failed to load messages",
             description: "Please try again.",
@@ -194,7 +194,7 @@ export function ChatInterface({ user, onLogout }: ChatInterfaceProps) {
       ])
       setNewMessage("")
     } catch (error: any) {
-      console.error("[v0] Failed to send message:", error)
+      // Error intentionally not logged to reduce noisy dev output
       toast({
         title: "Failed to send message",
         description: error.message || "Please try again.",
@@ -209,7 +209,7 @@ export function ChatInterface({ user, onLogout }: ChatInterfaceProps) {
     try {
       await authAPI.logout()
     } catch (error) {
-      console.error("[v0] Logout error:", error)
+      // Error intentionally not logged to reduce noisy dev output
     } finally {
       socketService.disconnect()
       onLogout()

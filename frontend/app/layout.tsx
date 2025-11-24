@@ -2,7 +2,7 @@ import type React from "react"
 import type { Metadata } from "next"
 import { GeistSans } from "geist/font/sans"
 import { GeistMono } from "geist/font/mono"
-import { Analytics } from "@vercel/analytics/next"
+// Analytics removed to avoid debug logs during development
 import "./globals.css"
 import { ThemeProvider } from "@/components/theme-provider"
 import { Suspense } from "react"
@@ -10,7 +10,7 @@ import { Suspense } from "react"
 export const metadata: Metadata = {
   title: "LYNKCHAT",
   description: "End-to-end encrypted real-time chat application",
-  generator: "v0.app",
+  generator: "LYNKCHAT",
 }
 
 export default function RootLayout({
@@ -26,7 +26,7 @@ export default function RootLayout({
             {children}
           </ThemeProvider>
         </Suspense>
-        <Analytics />
+        {/* Analytics component removed to prevent Vercel debug logs in development */}
       </body>
     </html>
   )

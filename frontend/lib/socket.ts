@@ -33,17 +33,15 @@ class SocketService {
     })
 
     this.socket.on("connect", () => {
-      console.log("[v0] Socket connected")
       // Join user to their room
       this.socket?.emit("join", userId)
     })
 
     this.socket.on("disconnect", () => {
-      console.log("[v0] Socket disconnected")
     })
 
     this.socket.on("connect_error", (error) => {
-      console.error("[v0] Socket connection error:", error)
+      // Connection errors are intentionally not logged to console to reduce noise
     })
   }
 

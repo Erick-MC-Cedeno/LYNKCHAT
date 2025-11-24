@@ -158,8 +158,4 @@ Here are some screenshots of the application UI. Click to view full size.
 ![Chat UI](frontend/assets/screenshots/chatui.png)
 
 ![Chat overview](frontend/assets/screenshots/chat.png)
-
-![Chat detail](frontend/assets/screenshots/chat2.png)
   
-
-<!-- Removed end-to-end encryption guide and implementation details -->

@@ -1,6 +1,6 @@
 import { io, type Socket } from "socket.io-client"
 
-const SOCKET_URL = "https://crispy-space-couscous-rqr4g6grxr4cw5wg-5000.app.github.dev"
+const SOCKET_URL = "http://localhost:5000"
 
 export interface SocketMessage {
   senderId: string

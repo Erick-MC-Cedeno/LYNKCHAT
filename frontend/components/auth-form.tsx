@@ -11,8 +11,7 @@ import { Label } from "@/components/ui/label"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { useToast } from "@/hooks/use-toast"
 import { Shield, Zap } from "lucide-react"
-import { authAPI, userAPI } from "@/lib/api"
-import { encryptionService } from "@/lib/encryption"
+import { authAPI } from "@/lib/api"
 
 interface AuthFormProps {
   onLogin: (user: any) => void
@@ -22,16 +21,7 @@ export function AuthForm({ onLogin }: AuthFormProps) {
   const [isLoading, setIsLoading] = useState(false)
   const { toast } = useToast()
 
-  useEffect(() => {
-    const initEncryption = async () => {
-      try {
-        await encryptionService.initialize()
-      } catch (error) {
-        console.error("[v0] Failed to initialize encryption:", error)
-      }
-    }
-    initEncryption()
-  }, [])
+  // Encryption removed: no-op
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>, isLogin: boolean) => {
     e.preventDefault()
@@ -57,15 +47,7 @@ export function AuthForm({ onLogin }: AuthFormProps) {
         })
       }
 
-      if (!encryptionService.hasKeys()) {
-        const { publicKey, privateKey } = encryptionService.generateKeyPair()
-        encryptionService.storeKeys(publicKey, privateKey)
-
-        // Upload public key to server
-        await userAPI.updatePublicKey(publicKey)
-      }
-
-      onLogin(result.user)
+      onLogin(result)
       toast({
         title: isLogin ? "Welcome back!" : "Account created!",
         description: "You are now connected to LYNKCHAT.",
@@ -89,7 +71,7 @@ export function AuthForm({ onLogin }: AuthFormProps) {
             <Shield className="h-8 w-8 text-accent cyber-text" />
             <h1 className="text-4xl font-bold cyber-text">LYNKCHAT</h1>
           </div>
-          <p className="text-muted-foreground">End-to-end encrypted messaging</p>
+          <p className="text-muted-foreground">Secure messaging</p>
         </div>
 
         <Card className="cyber-border bg-card/50 backdrop-blur-sm">
@@ -98,7 +80,7 @@ export function AuthForm({ onLogin }: AuthFormProps) {
               <Zap className="h-5 w-5 text-accent" />
               Secure Access
             </CardTitle>
-            <CardDescription>Connect to the encrypted network</CardDescription>
+            <CardDescription>Connect to the network</CardDescription>
           </CardHeader>
           <CardContent>
             <Tabs defaultValue="login" className="w-full">

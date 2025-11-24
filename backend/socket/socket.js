@@ -2,6 +2,9 @@ import { Server } from "socket.io"
 import http from "http"
 import express from "express"
 
+import Conversation from "../models/conversation-model/conversation.model.js"
+import Message from "../models/message-model/message.model.js"
+
 const app = express()
 
 const server = http.createServer(app)
@@ -20,21 +23,57 @@ export const getReceiverSocketId = (receiverId) => {
 
 io.on("connection", (socket) => {
   const userId = socket.handshake.query.userId
+  // Support both handshake query and explicit join event from client
   if (userId != "undefined") userSocketMap[userId] = socket.id
 
+  socket.on("join", (joinedUserId) => {
+    if (joinedUserId != null && joinedUserId !== "undefined") {
+      userSocketMap[joinedUserId] = socket.id
+    }
+    io.emit("getOnlineUsers", Object.keys(userSocketMap))
+  })
+
+  // Emit initial online users (if any)
   io.emit("getOnlineUsers", Object.keys(userSocketMap))
 
-  socket.on("sendMessage", async ({ receiverId, message }) => {
-    const receiverSocketId = getReceiverSocketId(receiverId)
-    if (receiverSocketId) {
-      // Send the message to the receiver in real-time
-      io.to(receiverSocketId).emit("newMessage", {
-        senderId: userId,
-        receiverId: receiverId,
-        message: message,
-        createdAt: new Date(),
-        _id: Date.now().toString(), // Temporary ID, will be replaced by actual DB ID
+  // When client emits a message, persist and forward it
+  socket.on("sendMessage", async ({ receiverId, message, senderId: suppliedSender }) => {
+    try {
+      // Prefer sender id supplied by client, fall back to handshake query
+      const senderId = suppliedSender || userId
+
+      if (!message || message.toString().trim().length === 0) return
+
+      // Ensure there's a conversation
+      let conversation = await Conversation.findOne({
+        participants: { $all: [senderId, receiverId] },
       })
+
+      if (!conversation) {
+        conversation = await Conversation.create({
+          participants: [senderId, receiverId],
+        })
+      }
+
+      const newMessage = new Message({
+        senderId,
+        receiverId,
+        message,
+        read: false,
+      })
+
+      conversation.messages.push(newMessage._id)
+      await Promise.all([conversation.save(), newMessage.save()])
+
+      const receiverSocketId = getReceiverSocketId(receiverId)
+      if (receiverSocketId) {
+        io.to(receiverSocketId).emit("newMessage", newMessage)
+      }
+
+      // Optionally emit back to sender to confirm persistence (server-normalized message)
+      socket.emit("newMessage", newMessage)
+    } catch (err) {
+      console.error("Error in socket sendMessage handler:", err)
     }
   })
 
@@ -54,7 +93,6 @@ io.on("connection", (socket) => {
 
   socket.on("markMessageAsRead", async (messageId) => {
     try {
-      const Message = await import("../models/message-model/message.model.js").then((module) => module.default)
       const message = await Message.findById(messageId)
 
       if (message) {

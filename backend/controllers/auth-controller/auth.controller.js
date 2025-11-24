@@ -83,6 +83,30 @@ export const login = async (req, res) => {
     }
 };
 
+export const getCurrentUser = async (req, res) => {
+    try {
+        const user = await User.findById(req.user._id).select("-password");
+        if (!user) {
+            return res.status(404).json({ error: "User not found" });
+        }
+
+        const imageBase64 = user.image ? `data:image/jpeg;base64,${user.image.toString('base64')}` : null;
+
+        res.status(200).json({
+            _id: user._id,
+            fullName: user.fullName,
+            username: user.username,
+            gender: user.gender,
+            image: imageBase64,
+            createdAt: user.createdAt,
+            updatedAt: user.updatedAt
+        });
+    } catch (error) {
+        console.log("Error in getCurrentUser controller", error.message);
+        res.status(500).json({ error: "Internal Server Error" });
+    }
+};
+
 export const fetchAllUsersController = async (req, res) => {
     try {
         const keyword = req.query.search

@@ -1,6 +1,7 @@
 import express from "express";
 import multer from "multer";
-import { login, logout, signup } from "../../controllers/auth-controller/auth.controller.js";
+import { getCurrentUser, login, logout, signup } from "../../controllers/auth-controller/auth.controller.js";
+import protectRoute from "../../middleware/protectRoute.js";
 
 const router = express.Router();
 const storage = multer.memoryStorage(); 
@@ -11,5 +12,7 @@ router.post("/signup", upload.single("image"), signup);
 router.post("/login", login);
 
 router.post("/logout", logout);
+
+router.get("/me", protectRoute, getCurrentUser);
 
 export default router;

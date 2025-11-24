@@ -1,4 +1,4 @@
-const API_BASE_URL = "https://crispy-space-couscous-rqr4g6grxr4cw5wg-5000.app.github.dev/api"
+const API_BASE_URL = "http://localhost:5000/api"
 
 // Types based on the backend models
 export interface User {
@@ -7,7 +7,6 @@ export interface User {
   username: string
   gender: "male" | "female"
   image?: string
-  publicKey?: string
   createdAt: string
   updatedAt: string
 }
@@ -32,6 +31,19 @@ export interface Conversation {
 
 // Auth API functions
 export const authAPI = {
+  async getCurrentUser(): Promise<User> {
+    const response = await fetch(`${API_BASE_URL}/auth/me`, {
+      method: "GET",
+      credentials: "include",
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to fetch current user");
+    }
+
+    return response.json();
+  },
+
   async signup(data: {
     fullName: string
     username: string
@@ -107,21 +119,6 @@ export const userAPI = {
     }
 
     return response.json()
-  },
-
-  async updatePublicKey(publicKey: string): Promise<void> {
-    const response = await fetch(`${API_BASE_URL}/user/publicKey`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({ publicKey }),
-      credentials: "include",
-    })
-
-    if (!response.ok) {
-      throw new Error("Failed to update public key")
-    }
   },
 }
 

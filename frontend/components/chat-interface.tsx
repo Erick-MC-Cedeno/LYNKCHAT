@@ -11,7 +11,6 @@ import { ScrollArea } from "@/components/ui/scroll-area"
 import { useToast } from "@/hooks/use-toast"
 import { Send, Shield, LogOut, Users, Lock } from "lucide-react"
 import { socketService } from "@/lib/socket"
-import { encryptionService, type EncryptedMessage } from "@/lib/encryption"
 
 interface ChatInterfaceProps {
   user: User
@@ -19,6 +18,8 @@ interface ChatInterfaceProps {
 }
 
 export function ChatInterface({ user, onLogout }: ChatInterfaceProps) {
+  // Encryption removed: messages are plain text strings
+
   const [users, setUsers] = useState<User[]>([])
   const [selectedUser, setSelectedUser] = useState<User | null>(null)
   const [messages, setMessages] = useState<Message[]>([])
@@ -29,32 +30,35 @@ export function ChatInterface({ user, onLogout }: ChatInterfaceProps) {
   const { toast } = useToast()
 
   useEffect(() => {
-    socketService.connect(user._id)
+    socketService.connect(user?._id)
 
     socketService.onOnlineUsers((users: string[]) => {
       setOnlineUsers(users)
     })
 
     socketService.onNewMessage((message: any) => {
-      try {
-        const sender = users.find((u) => u._id === message.senderId)
-        if (sender?.publicKey && message.message) {
-          const encryptedData = JSON.parse(message.message) as EncryptedMessage
-          const decryptedMessage = encryptionService.decryptMessage(encryptedData, sender.publicKey)
-          setMessages((prev) => [...prev, { ...message, message: decryptedMessage }])
-        } else {
-          setMessages((prev) => [...prev, message])
+      const sender = users.find((u) => u._id === message.senderId)
+      // If we have an optimistic (temporary) message for the same content and sender,
+      // replace it with the server-persisted message to avoid duplicates.
+      setMessages((prev) => {
+        const tempIndex = prev.findIndex(
+          (m) => m._id?.toString().startsWith("tmp-") && m.message === message.message && m.senderId === message.senderId
+        )
+
+        if (tempIndex !== -1) {
+          const copy = [...prev]
+          copy[tempIndex] = message
+          return copy
         }
-      } catch (error) {
-        console.error("[v0] Failed to decrypt message:", error)
-        setMessages((prev) => [...prev, message])
-      }
+
+        return [...prev, message]
+      })
     })
 
     return () => {
       socketService.disconnect()
     }
-  }, [user._id, users])
+  }, [user?._id, users])
 
   useEffect(() => {
     const fetchUsers = async () => {
@@ -80,24 +84,8 @@ export function ChatInterface({ user, onLogout }: ChatInterfaceProps) {
         try {
           const messagesData = await messageAPI.getMessages(selectedUser._id)
 
-          // Decrypt messages
-          const decryptedMessages = messagesData.map((msg) => {
-            try {
-              if (msg.message && selectedUser.publicKey) {
-                const encryptedData = JSON.parse(msg.message) as EncryptedMessage
-                const senderPublicKey =
-                  msg.senderId === user._id ? encryptionService.getPublicKey() : selectedUser.publicKey
-                const decryptedMessage = encryptionService.decryptMessage(encryptedData, senderPublicKey)
-                return { ...msg, message: decryptedMessage }
-              }
-              return msg
-            } catch (error) {
-              console.error("[v0] Failed to decrypt message:", error)
-              return msg
-            }
-          })
-
-          setMessages(decryptedMessages)
+          // Messages are plain text — store as received
+          setMessages(messagesData)
         } catch (error) {
           console.error("[v0] Failed to fetch messages:", error)
           toast({
@@ -110,7 +98,7 @@ export function ChatInterface({ user, onLogout }: ChatInterfaceProps) {
 
       fetchMessages()
     }
-  }, [selectedUser, user._id, toast])
+  }, [selectedUser, user?._id, toast])
 
   // Scroll to bottom when messages change
   useEffect(() => {
@@ -125,16 +113,30 @@ export function ChatInterface({ user, onLogout }: ChatInterfaceProps) {
     try {
       let messageToSend = newMessage
 
-      // Encrypt message if recipient has public key
-      if (selectedUser.publicKey) {
-        const encryptedData = encryptionService.encryptMessage(newMessage, selectedUser.publicKey)
-        messageToSend = JSON.stringify(encryptedData)
+      // Send plaintext message (E2E removed)
+      messageToSend = newMessage
+      // Send via socket for real-time delivery. Server should persist and broadcast.
+      const socketPayload = {
+        senderId: user?._id || "",
+        receiverId: selectedUser._id,
+        message: messageToSend,
+        createdAt: new Date().toISOString(),
       }
 
-      const sentMessage = await messageAPI.sendMessage(selectedUser._id, messageToSend)
+      // Emit through socket
+      socketService.sendMessage(socketPayload)
 
-      // Add decrypted message to local state
-      setMessages((prev) => [...prev, { ...sentMessage, message: newMessage }])
+      // Optimistically add message to UI
+      setMessages((prev) => [
+        ...prev,
+        {
+          _id: `tmp-${Date.now()}`,
+          senderId: socketPayload.senderId,
+          receiverId: socketPayload.receiverId,
+          message: socketPayload.message,
+          createdAt: socketPayload.createdAt,
+        } as Message,
+      ])
       setNewMessage("")
     } catch (error: any) {
       console.error("[v0] Failed to send message:", error)
@@ -154,7 +156,6 @@ export function ChatInterface({ user, onLogout }: ChatInterfaceProps) {
     } catch (error) {
       console.error("[v0] Logout error:", error)
     } finally {
-      encryptionService.clearKeys()
       socketService.disconnect()
       onLogout()
     }
@@ -183,12 +184,12 @@ export function ChatInterface({ user, onLogout }: ChatInterfaceProps) {
           <div className="flex items-center gap-3 p-3 rounded-lg bg-muted/50 cyber-border">
             <Avatar className="h-10 w-10">
               <AvatarFallback className="bg-accent text-accent-foreground">
-                {user.fullName.charAt(0).toUpperCase()}
+                {user?.fullName?.charAt(0)?.toUpperCase() || "U"}
               </AvatarFallback>
             </Avatar>
             <div className="flex-1 min-w-0">
-              <p className="font-medium truncate">{user.fullName}</p>
-              <p className="text-sm text-muted-foreground">@{user.username}</p>
+              <p className="font-medium truncate">{user?.fullName || "Unknown User"}</p>
+              <p className="text-sm text-muted-foreground">@{user?.username || "unknown"}</p>
             </div>
             <Lock className="h-4 w-4 text-accent" />
           </div>
@@ -216,7 +217,7 @@ export function ChatInterface({ user, onLogout }: ChatInterfaceProps) {
                   <div className="relative">
                     <Avatar className="h-10 w-10">
                       <AvatarFallback className="bg-secondary text-secondary-foreground">
-                        {contact.fullName.charAt(0).toUpperCase()}
+                        {contact?.fullName?.charAt(0)?.toUpperCase() || "C"}
                       </AvatarFallback>
                     </Avatar>
                     {onlineUsers.includes(contact._id) && (
@@ -224,10 +225,10 @@ export function ChatInterface({ user, onLogout }: ChatInterfaceProps) {
                     )}
                   </div>
                   <div className="flex-1 min-w-0">
-                    <p className="font-medium truncate">{contact.fullName}</p>
-                    <p className="text-sm text-muted-foreground">@{contact.username}</p>
+                    <p className="font-medium truncate">{contact?.fullName || "Unknown Contact"}</p>
+                    <p className="text-sm text-muted-foreground">@{contact?.username || "unknown"}</p>
                   </div>
-                  {contact.publicKey && <Shield className="h-4 w-4 text-accent" />}
+                    {/* publicKey removed — encryption disabled */}
                 </div>
               ))}
             </div>
@@ -254,10 +255,7 @@ export function ChatInterface({ user, onLogout }: ChatInterfaceProps) {
                     {onlineUsers.includes(selectedUser._id) && <span className="text-accent">• Online</span>}
                   </p>
                 </div>
-                <div className="flex items-center gap-2">
-                  <Shield className="h-5 w-5 text-accent" />
-                  <span className="text-sm text-accent">Encrypted</span>
-                </div>
+                  {/* Encryption disabled */}
               </div>
             </div>
 
@@ -267,11 +265,11 @@ export function ChatInterface({ user, onLogout }: ChatInterfaceProps) {
                 {messages.map((message) => (
                   <div
                     key={message._id}
-                    className={`flex ${message.senderId === user._id ? "justify-end" : "justify-start"}`}
+                    className={`flex ${message.senderId === user?._id ? "justify-end" : "justify-start"}`}
                   >
                     <div
                       className={`max-w-xs lg:max-w-md px-4 py-2 rounded-lg ${
-                        message.senderId === user._id
+                        message.senderId === user?._id
                           ? "bg-accent text-accent-foreground message-glow"
                           : "bg-muted text-muted-foreground cyber-border"
                       }`}
@@ -288,13 +286,13 @@ export function ChatInterface({ user, onLogout }: ChatInterfaceProps) {
             {/* Message Input */}
             <div className="p-4 border-t border-border bg-card/30 backdrop-blur-sm">
               <form onSubmit={handleSendMessage} className="flex gap-2">
-                <Input
-                  value={newMessage}
-                  onChange={(e) => setNewMessage(e.target.value)}
-                  placeholder="Type your encrypted message..."
-                  className="flex-1 cyber-border bg-input"
-                  disabled={isLoading}
-                />
+                  <Input
+                    value={newMessage}
+                    onChange={(e) => setNewMessage(e.target.value)}
+                    placeholder="Type a message..."
+                    className="flex-1 cyber-border bg-input"
+                    disabled={isLoading}
+                  />
                 <Button
                   type="submit"
                   size="icon"
@@ -308,11 +306,11 @@ export function ChatInterface({ user, onLogout }: ChatInterfaceProps) {
           </>
         ) : (
           <div className="flex-1 flex items-center justify-center">
-            <div className="text-center">
-              <Shield className="h-16 w-16 text-accent mx-auto mb-4 cyber-text" />
-              <h3 className="text-xl font-semibold mb-2">Select a Contact</h3>
-              <p className="text-muted-foreground">Choose someone to start an encrypted conversation</p>
-            </div>
+                <div className="text-center">
+                <Shield className="h-16 w-16 text-accent mx-auto mb-4 cyber-text" />
+                <h3 className="text-xl font-semibold mb-2">Select a Contact</h3>
+                <p className="text-muted-foreground">Choose someone to start a conversation</p>
+              </div>
           </div>
         )}
       </div>

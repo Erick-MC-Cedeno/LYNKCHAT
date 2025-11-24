@@ -3,7 +3,6 @@
 import { useState, useEffect } from "react"
 import { AuthForm } from "@/components/auth-form"
 import { ChatInterface } from "@/components/chat-interface"
-import { encryptionService } from "@/lib/encryption"
 
 export default function Home() {
   const [user, setUser] = useState(null)
@@ -12,20 +11,15 @@ export default function Home() {
   useEffect(() => {
     const initializeApp = async () => {
       try {
-        // Initialize encryption first
-        await encryptionService.initialize()
-
         // Check if user is already logged in - backend doesn't have verify endpoint
         // Instead, we'll try to fetch user data to verify the session
-        const response = await fetch("https://crispy-space-couscous-rqr4g6grxr4cw5wg-5000.app.github.dev/api/user", {
-          credentials: "include", // Use cookies instead of Authorization header
-        })
+        const response = await fetch("http://localhost:5000/api/auth/me", {
+          credentials: "include",
+        });
 
         if (response.ok) {
-          // If we can fetch users, we're authenticated
-          // We need to get current user info somehow - for now we'll set a placeholder
-          // The real user data will be set during login
-          setUser({ authenticated: true })
+          const userData = await response.json();
+          setUser(userData);
         }
       } catch (error) {
         console.error("[v0] App initialization failed:", error)

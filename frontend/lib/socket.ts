@@ -76,6 +76,16 @@ class SocketService {
     this.socket?.on("messageUpdated", callback)
   }
 
+  // Listen for unread counts updates
+  onUnreadCounts(callback: (counts: Record<string, number>) => void): void {
+    this.socket?.on("unreadCounts", callback)
+  }
+
+  // Listen for message read events (message id)
+  onMessageRead(callback: (messageId: string) => void): void {
+    this.socket?.on("messageRead", callback)
+  }
+
   // Send a message through socket
   sendMessage(message: SocketMessage): void {
     this.socket?.emit("sendMessage", message)
@@ -88,6 +98,11 @@ class SocketService {
 
   emitStopTyping(payload: { receiverId: string; senderId?: string }): void {
     this.socket?.emit("stopTyping", payload)
+  }
+
+  // Mark a message as read (notify server)
+  markMessageAsRead(messageId: string): void {
+    this.socket?.emit("markMessageAsRead", messageId)
   }
 
   // Remove listeners

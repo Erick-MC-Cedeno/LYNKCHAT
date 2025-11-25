@@ -62,10 +62,32 @@ export const getMessages = async (req, res) => {
 		for (let msg of unreadMessages) {
 			msg.read = true;
 			await msg.save(); 
-			const receiverSocketId = getReceiverSocketId(senderId);
-			if (receiverSocketId) {
-				io.to(receiverSocketId).emit("messageRead", msg._id);
+			// Notify the original sender that their message was read
+			const senderSocketId = getReceiverSocketId(msg.senderId);
+			if (senderSocketId) {
+				io.to(senderSocketId).emit("messageRead", msg._id.toString());
 			}
+		}
+
+		// After marking messages as read, compute updated unread counts per sender and emit to the current user so sidebar updates in real-time
+		try {
+			const loggedInUserId = senderId;
+			const users = await Message.aggregate([
+				{ $match: { receiverId: loggedInUserId, read: false } },
+				{ $group: { _id: "$senderId", count: { $sum: 1 } } }
+			]);
+
+			const counts = users.reduce((acc, cur) => {
+				acc[cur._id.toString()] = cur.count;
+				return acc;
+			}, {});
+
+			const mySocketId = getReceiverSocketId(loggedInUserId);
+			if (mySocketId) {
+				io.to(mySocketId).emit("unreadCounts", counts);
+			}
+		} catch (err) {
+			console.error("Error computing unread counts:", err.message);
 		}
 
 		res.status(200).json(messages);

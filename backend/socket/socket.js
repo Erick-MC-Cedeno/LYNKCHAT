@@ -77,6 +77,25 @@ io.on("connection", (socket) => {
 
       // Optionally emit back to sender to confirm persistence (server-normalized message)
       socket.emit("newMessage", newMessage)
+
+      // Compute unread counts for the receiver and emit so their sidebar updates in real-time
+      try {
+        const unreadAgg = await Message.aggregate([
+          { $match: { receiverId: receiverId, read: false } },
+          { $group: { _id: "$senderId", count: { $sum: 1 } } }
+        ])
+
+        const counts = unreadAgg.reduce((acc, cur) => {
+          acc[cur._id.toString()] = cur.count
+          return acc
+        }, {})
+
+        if (receiverSocketId) {
+          io.to(receiverSocketId).emit("unreadCounts", counts)
+        }
+      } catch (err) {
+        console.error("Error computing unread counts on sendMessage:", err)
+      }
     } catch (err) {
       console.error("Error in socket sendMessage handler:", err)
     }
@@ -107,6 +126,26 @@ io.on("connection", (socket) => {
         const senderSocketId = getReceiverSocketId(message.senderId)
         if (senderSocketId) {
           io.to(senderSocketId).emit("messageRead", messageId)
+        }
+        // After marking read, recompute unread counts for this receiver and emit
+        try {
+          const receiverId = message.receiverId
+          const unreadAgg = await Message.aggregate([
+            { $match: { receiverId: receiverId, read: false } },
+            { $group: { _id: "$senderId", count: { $sum: 1 } } }
+          ])
+
+          const counts = unreadAgg.reduce((acc, cur) => {
+            acc[cur._id.toString()] = cur.count
+            return acc
+          }, {})
+
+          const receiverSocket = getReceiverSocketId(receiverId)
+          if (receiverSocket) {
+            io.to(receiverSocket).emit("unreadCounts", counts)
+          }
+        } catch (err) {
+          console.error("Error computing unread counts after markMessageAsRead:", err)
         }
       }
     } catch (error) {

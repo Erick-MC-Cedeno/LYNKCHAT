@@ -80,7 +80,13 @@ export function ChatInterface({ user, onLogout }: ChatInterfaceProps) {
           (isSameId(message.senderId, user._id) && isSameId(message.receiverId, currentId)) ||
           (isSameId(message.senderId, currentId) && isSameId(message.receiverId, user._id))
 
-        if (!belongsToChat) return
+        if (!belongsToChat) {
+          // If message is for current user but not the opened chat, increment unread count for sender
+          if (isSameId(message.receiverId, user._id)) {
+            setUsers(prev => prev.map(u => u._id === message.senderId ? { ...u, unreadCount: (u.unreadCount || 0) + 1 } : u))
+          }
+          return
+        }
       }
 
       setMessages((prev) => {
@@ -119,6 +125,9 @@ export function ChatInterface({ user, onLogout }: ChatInterfaceProps) {
 
       setMessages(prev => prev.map(m => m._id === updatedMessage._id ? updatedMessage : m))
     })
+    socketService.onMessageRead((messageId: string) => {
+      setMessages(prev => prev.map(m => m._id === messageId ? { ...m, read: true } : m))
+    })
     socketService.onTyping((p) => handleTypingStatus(p, true))
     socketService.onStopTyping((p) => handleTypingStatus(p, false))
 
@@ -126,6 +135,7 @@ export function ChatInterface({ user, onLogout }: ChatInterfaceProps) {
       socketService.off("getOnlineUsers")
       socketService.off("newMessage")
       socketService.off("messageUpdated")
+      socketService.off("messageRead")
       socketService.off("typing")
       socketService.off("stopTyping")
       socketService.disconnect()
@@ -135,15 +145,37 @@ export function ChatInterface({ user, onLogout }: ChatInterfaceProps) {
   // Fetch contacts
   useEffect(() => {
     userAPI.getAllUsers()
-      .then(setUsers)
+      .then((u) => setUsers(u))
       .catch(() => toast({ title: "Failed to load contacts", variant: "destructive" }))
   }, [toast])
+
+  // Subscribe to unreadCounts socket updates
+  useEffect(() => {
+    socketService.onUnreadCounts((counts) => {
+      // counts is a map of senderId -> unreadCount
+      setUsers(prev => prev.map(u => ({ ...u, unreadCount: counts[u._id] || 0 })))
+    })
+
+    return () => {
+      socketService.off("unreadCounts")
+    }
+  }, [])
 
   // Fetch messages
   useEffect(() => {
     if (!selectedUser) return
     messageAPI.getMessages(selectedUser._id)
-      .then(setMessages)
+      .then((msgs) => {
+        setMessages(msgs)
+        // If there are unread messages that were sent to the current user, mark them as read immediately (real-time)
+        const unreadForMe = msgs.filter(m => m.receiverId === user._id && !m.read)
+        if (unreadForMe.length > 0) {
+          // Optimistically mark them read locally so UI updates immediately
+          setMessages(prev => prev.map(pm => unreadForMe.some(u => u._id === pm._id) ? { ...pm, read: true } : pm))
+          // Notify server via socket for each message id
+          unreadForMe.forEach(m => socketService.markMessageAsRead(m._id))
+        }
+      })
       .catch(() => toast({ title: "Failed to load messages", variant: "destructive" }))
   }, [selectedUser, toast])
 
@@ -316,6 +348,8 @@ export function ChatInterface({ user, onLogout }: ChatInterfaceProps) {
                   <div
                     onClick={() => {
                       setSelectedUser(contact)
+                      // clear local unread count optimistically when opening
+                      setUsers(prev => prev.map(u => u._id === contact._id ? { ...u, unreadCount: 0 } : u))
                       setIsMobileSidebarOpen(false)
                     }}
                     className="flex items-center flex-1 gap-3 cursor-pointer"
@@ -332,7 +366,14 @@ export function ChatInterface({ user, onLogout }: ChatInterfaceProps) {
                     </div>
                     <div className="flex-1 min-w-0">
                       <p className="font-medium truncate">{contact?.fullName || "Unknown"}</p>
-                      <p className="text-sm text-muted-foreground">@{sanitizeUsername(contact?.username)}</p>
+                      <p className="text-sm text-muted-foreground flex items-center gap-2">
+                        @{sanitizeUsername(contact?.username)}
+                        {contact.unreadCount && contact.unreadCount > 0 && (
+                          <span className="ml-2 inline-flex items-center justify-center h-5 w-5 rounded-full bg-destructive text-destructive-foreground text-xs">
+                            {contact.unreadCount}
+                          </span>
+                        )}
+                      </p>
                     </div>
                   </div>
 
@@ -461,8 +502,15 @@ export function ChatInterface({ user, onLogout }: ChatInterfaceProps) {
                             </div>
                           ) : (
                             <>
-                              <p className="text-sm">{message.message}</p>
-                              <p className="text-xs opacity-70 mt-1">{new Date(message.createdAt).toLocaleTimeString()}</p>
+                              <div className="flex items-center gap-2">
+                                <p className="text-sm">{message.message}</p>
+                              </div>
+                              <div className="flex items-center gap-2">
+                                <p className="text-xs opacity-70 mt-1">{new Date(message.createdAt).toLocaleTimeString()}</p>
+                                {isMe && message.read && (
+                                  <span className="text-black text-xs ml-2">✓✓</span>
+                                )}
+                              </div>
                             </>
                           )}
 

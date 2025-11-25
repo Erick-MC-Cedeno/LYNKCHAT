@@ -6,6 +6,5 @@ const router = express.Router();
 
 router.get("/", protectRoute, getUsersForSidebar);
 
-// Public key endpoints removed (E2E disabled)
 
 export default router;

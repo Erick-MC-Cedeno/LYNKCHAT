@@ -12,4 +12,3 @@ export const getUsersForSidebar = async (req, res) => {
 		res.status(500).json({ error: "Internal server error" });
 	}
 };
-// updatePublicKey removed: E2E encryption disabled

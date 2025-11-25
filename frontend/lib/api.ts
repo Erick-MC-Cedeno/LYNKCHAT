@@ -152,4 +152,49 @@ export const messageAPI = {
 
     return response.json()
   },
+
+  async deleteMessage(messageId: string): Promise<{ message: string }> {
+    const response = await fetch(`${API_BASE_URL}/messages/message/${messageId}`, {
+      method: "DELETE",
+      credentials: "include",
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.error || "Failed to delete message")
+    }
+
+    return response.json()
+  },
+
+  async deleteConversation(otherUserId: string): Promise<{ message: string }> {
+    const response = await fetch(`${API_BASE_URL}/messages/conversation/${otherUserId}`, {
+      method: "DELETE",
+      credentials: "include",
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.error || "Failed to delete conversation")
+    }
+
+    return response.json()
+  },
+  async updateMessage(messageId: string, newText: string): Promise<Message> {
+    const response = await fetch(`${API_BASE_URL}/messages/message/${messageId}`, {
+      method: "PATCH",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({ message: newText }),
+      credentials: "include",
+    })
+
+    if (!response.ok) {
+      const error = await response.json()
+      throw new Error(error.error || "Failed to update message")
+    }
+
+    return response.json()
+  },
 }

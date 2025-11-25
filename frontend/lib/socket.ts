@@ -71,6 +71,11 @@ class SocketService {
     this.socket?.on("getOnlineUsers", callback)
   }
 
+  // Listen for message updates (edits)
+  onMessageUpdated(callback: (message: any) => void): void {
+    this.socket?.on("messageUpdated", callback)
+  }
+
   // Send a message through socket
   sendMessage(message: SocketMessage): void {
     this.socket?.emit("sendMessage", message)

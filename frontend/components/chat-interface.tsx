@@ -563,7 +563,7 @@ export function ChatInterface({ user, onLogout }: ChatInterfaceProps) {
                     ref={inputRef}
                     onChange={handleTyping}
                     placeholder="Type a message..."
-                    className="w-full h-10 sm:h-14 pr-11 sm:pr-14 py-2 sm:py-3 text-sm rounded-full border-2 cyber-border bg-input focus:ring-2 focus:ring-accent transition-all"
+                    className="w-full h-10 sm:h-14 pr-12 sm:pr-16 py-2 sm:py-3 text-sm rounded-full border-2 cyber-border bg-input focus:ring-2 focus:ring-accent transition-all"
                     disabled={isLoading}
                   />
                   {editingViaComposer && (
@@ -576,7 +576,7 @@ export function ChatInterface({ user, onLogout }: ChatInterfaceProps) {
                   <Button
                     type="submit"
                     size="icon"
-                    className="absolute right-1 top-1/2 -translate-y-1/2 h-8 w-8 sm:h-9 sm:w-9 rounded-full cyber-glow bg-accent text-accent-foreground hover:bg-accent/90 hover:scale-105 transition-transform shadow-lg"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 h-8 w-8 sm:h-9 sm:w-9 rounded-full cyber-glow bg-accent text-accent-foreground hover:bg-accent/90 hover:scale-105 transition-transform shadow-lg"
                     disabled={isLoading || !newMessage.trim()}
                   >
                     <Send className="h-4 w-4" />

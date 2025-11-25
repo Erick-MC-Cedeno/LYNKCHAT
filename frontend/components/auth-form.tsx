@@ -66,23 +66,20 @@ export function AuthForm({ onLogin }: AuthFormProps) {
   return (
     <div className="min-h-screen flex items-center justify-center p-4 bg-gradient-to-br from-background via-card to-background">
       <div className="w-full max-w-md">
-        <div className="text-center mb-8">
-          <div className="flex items-center justify-center gap-2 mb-4">
-            <Shield className="h-8 w-8 text-accent cyber-text" />
-            <h1 className="text-4xl font-bold cyber-text">LYNKCHAT</h1>
-          </div>
-          <p className="text-muted-foreground">Secure messaging</p>
-        </div>
-
-        <Card className="cyber-border bg-card/50 backdrop-blur-sm">
-          <CardHeader className="text-center">
-            <CardTitle className="flex items-center justify-center gap-2">
+        <div>
+          <div className="text-center mb-4">
+            <div className="flex items-center justify-center gap-2 mb-2">
+              <Shield className="h-8 w-8 text-accent cyber-text" />
+              <h2 className="text-2xl sm:text-3xl font-bold cyber-text">LYNKCHAT</h2>
+            </div>
+            <p className="text-muted-foreground">Secure messaging</p>
+            <h3 className="flex items-center justify-center gap-2 mt-3 text-lg sm:text-xl font-medium">
               <Zap className="h-5 w-5 text-accent" />
               Secure Access
-            </CardTitle>
-            <CardDescription>Connect to the network</CardDescription>
-          </CardHeader>
-          <CardContent>
+            </h3>
+            <p className="text-center text-sm text-muted-foreground mb-4">Connect to the network</p>
+          </div>
+          <div>
             <Tabs defaultValue="login" className="w-full">
               <TabsList className="grid w-full grid-cols-2 mb-6">
                 <TabsTrigger value="login">Login</TabsTrigger>
@@ -181,8 +178,8 @@ export function AuthForm({ onLogin }: AuthFormProps) {
                 </form>
               </TabsContent>
             </Tabs>
-          </CardContent>
-        </Card>
+          </div>
+        </div>
       </div>
     </div>
   )
